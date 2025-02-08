@@ -1,84 +1,60 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Upload,
-  Users,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  CheckCircle2,
   Building2,
   Loader2,
   Search,
   FileText,
-  ArrowLeft,
-  LogIn
+  LogIn,
+  ArrowLeft
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useMarriageData } from '../hooks/useMarriageData';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { MarriageRecord } from '../types/marriage';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useMarriageData } from '../hooks/useMarriageData';
 
 function SearchPage({ onBack }: { onBack: () => void }) {
-  const [searchType, setSearchType] = useState('NOMOR BUKU NIKAH');
+  const [searchType, setSearchType] = useState('No Aktanikah');
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showResults, setShowResults] = useState(false);
   const [searchResults, setSearchResults] = useState<MarriageRecord[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSearching(true);
+    setSearchResults([]);
 
     try {
       const marriageRef = collection(db, 'marriages');
       let q = query(marriageRef);
 
-      if (startDate && endDate) {
-        q = query(
-          marriageRef,
-          where('tglNikah', '>=', startDate),
-          where('tglNikah', '<=', endDate)
-        );
+      if (searchKeyword) {
+        switch (searchType) {
+          case 'No Aktanikah':
+            q = query(marriageRef, where('NoAktanikah', '>=', searchKeyword.toUpperCase()), where('NoAktanikah', '<=', searchKeyword.toUpperCase() + '\uf8ff'));
+            break;
+          case 'Nama Suami':
+            q = query(marriageRef, where('NamaSuami', '>=', searchKeyword.toUpperCase()), where('NamaSuami', '<=', searchKeyword.toUpperCase() + '\uf8ff'));
+            break;
+          case 'Nama Istri':
+            q = query(marriageRef, where('NamaIstri', '>=', searchKeyword.toUpperCase()), where('NamaIstri', '<=', searchKeyword.toUpperCase() + '\uf8ff'));
+            break;
+          default:
+            console.warn('Unknown search type:', searchType);
+            break;
+        }
       }
 
       const querySnapshot = await getDocs(q);
-      const results: MarriageRecord[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as MarriageRecord;
-        if (searchKeyword) {
-          switch (searchType) {
-            case 'NOMOR BUKU NIKAH':
-              if (data.bukuNikah.includes(searchKeyword)) results.push(data);
-              break;
-            case 'NOMOR AKTA NIKAH':
-              if (data.noAkta.includes(searchKeyword)) results.push(data);
-              break;
-            case 'NAMA SUAMI':
-              if (data.suami.nama.toLowerCase().includes(searchKeyword.toLowerCase())) 
-                results.push(data);
-              break;
-            case 'NAMA ISTRI':
-              if (data.istri.nama.toLowerCase().includes(searchKeyword.toLowerCase())) 
-                results.push(data);
-              break;
-          }
-        } else {
-          results.push(data);
-        }
-      });
-
+      const results: MarriageRecord[] = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as MarriageRecord));
       setSearchResults(results);
-      setShowResults(true);
     } catch (error) {
-      console.error('Search error:', error);
+      console.error("Error fetching data:", error);
     } finally {
       setIsSearching(false);
     }
@@ -99,116 +75,94 @@ function SearchPage({ onBack }: { onBack: () => void }) {
 
       <div className="bg-white rounded-xl shadow-md p-6">
         <form onSubmit={handleSearch} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                TANGGAL NIKAH (AWAL)
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                TANGGAL NIKAH (AKHIR)
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Search Type
+            </label>
+            <select
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            >
+              <option>No Aktanikah</option>
+              <option>Nama Suami</option>
+              <option>Nama Istri</option>
+            </select>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                KATA KUNCI PENCARIAN
-              </label>
-              <select
-                value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option>NOMOR BUKU NIKAH</option>
-                <option>NOMOR AKTA NIKAH</option>
-                <option>NAMA SUAMI</option>
-                <option>NAMA ISTRI</option>
-              </select>
-            </div>
-            <div className="flex-1">
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Masukkan kata kunci pencarian..."
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Search Keyword
+            </label>
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value.toUpperCase())}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
           </div>
-
-          <div className="flex justify-center">
+          <div className="flex justify-between">
             <button
               type="submit"
-              disabled={isSearching}
-              className="bg-green-800 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+              className="bg-green-800 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
             >
-              {isSearching ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <Search size={20} />
-              )}
-              <span>PENCARIAN DATA</span>
+              <Search size={16} className="inline-block mr-2" />
+              Search
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchKeyword('');
+                setSearchResults([]);
+              }}
+              className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Clear
             </button>
           </div>
         </form>
 
-        {showResults && (
-          <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-4">Hasil Pencarian</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+        {isSearching ? (
+          <div className="flex justify-center mt-6">
+            <Loader2 className="animate-spin h-8 w-8 text-green-800" />
+          </div>
+        ) : (
+          searchResults.length > 0 && (
+            <div className="overflow-x-auto mt-8">
+              <h3 className="text-xl font-semibold mb-4">Search Results</h3>
+              <table className="min-w-full table-auto divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      KUA
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama KUA
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      BUKU NIKAH
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      No Perforasi
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      NO.AKTA
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      No Aktanikah
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      TGL.NIKAH
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama Suami
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      SUAMI
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      ISTRI
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama Istri
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {searchResults.map((result, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">{result.kua}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{result.bukuNikah}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{result.noAkta}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{result.tglNikah}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{result.suami.nama}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{result.istri.nama}</td>
+                  {searchResults.map((result) => (
+                    <tr key={result.id}>
+                      <td className="px-4 py-2 whitespace-nowrap">{result.NamaKUA}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{result.NoPerforasi}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{result.NoAktanikah}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{result.NamaSuami}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{result.NamaIstri}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          )
         )}
       </div>
     </div>
@@ -239,7 +193,7 @@ function processDataForCharts(data: MarriageRecord[]) {
     const wifeAgeRange = getAgeRange(record.istri.usia);
     
     husbandAgeData.set(husbandAgeRange, (husbandAgeData.get(husbandAgeRange) || 0) + 1);
-    wifeAgeData.set(wifeAgeRange, (wifeAgeData.get(wifeAgeRange) || 0) + 1);
+    wifeAgeData.set(wifeAgeRange, (wifeAgeRange ? wifeAgeRange : 0) + 1);
 
     // Underage marriages
     if (record.suami.usia < 19 || record.istri.usia < 19) {
@@ -263,7 +217,7 @@ function getAgeRange(age: number): string {
   if (age <= 25) return '19-25';
   if (age <= 30) return '26-30';
   if (age <= 35) return '31-35';
-  if (age <= 40) return '36-40';
+  if (age <= 40) return '>40';
   return '>40';
 }
 
@@ -289,6 +243,7 @@ export default function IndexPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/dashboard');
+      setIsLoginVisible(false);
     } catch (error: any) {
       setLoginError(error.message);
     }
@@ -470,8 +425,8 @@ export default function IndexPage() {
           </div>
         )}
       </main>
-      {/* Login Form */}
-      {isLoginVisible && (
+       {/* Login Form */}
+       {isLoginVisible && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-xl shadow-md w-96">
           <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
           {loginError && <p className="text-red-500 mb-4">{loginError}</p>}
