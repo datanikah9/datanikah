@@ -246,7 +246,7 @@ export default function IndexPage() {
       navigate('/dashboard');
       setIsLoginVisible(false);
     } catch (error: any) {
-      setLoginError(error.message);
+      setLoginError('Kredensial tidak valid.');
     }
   };
 
