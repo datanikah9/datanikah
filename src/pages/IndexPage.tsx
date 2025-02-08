@@ -7,7 +7,8 @@ import {
   Search,
   FileText,
   LogIn,
-  ArrowLeft
+  ArrowLeft,
+  X
 } from 'lucide-react';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -61,7 +62,7 @@ function SearchPage({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center space-x-4 mb-8">
         <button
           onClick={onBack}
@@ -207,7 +208,7 @@ function processDataForCharts(data: MarriageRecord[]) {
     locationData: Array.from(locationData, ([name, value]) => ({ name, value })),
     ageData: {
       husband: Array.from(husbandAgeData, ([age, value]) => ({ age, value })),
-      wife: Array.from(wifeAgeData, ([age, value]) => ({ age, value }))
+      wife: Array.from(wifeAgeData, ([age, value]))
     },
     underageData: Array.from(underageData, ([month, value]) => ({ month, value }))
   };
@@ -249,22 +250,16 @@ export default function IndexPage() {
     }
   };
 
+  const handleCloseLogin = () => {
+    setIsLoginVisible(false);
+    setLoginError(null);
+    setEmail('');
+    setPassword('');
+  };
+
   if (showSearch) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-green-800 text-white py-6 px-4 shadow-lg">
-          <div className="container mx-auto">
-            <div className="flex items-center space-x-4">
-              <Building2 size={40} />
-              <div>
-                <h1 className="text-2xl font-bold">SISTEM LAPORAN PERNIKAHAN</h1>
-                <h2 className="text-lg">KANTOR KEMENTERIAN AGAMA KOTA GORONTALO</h2>
-              </div>
-            </div>
-          </div>
-        </header>
-        <SearchPage onBack={() => setShowSearch(false)} />
-      </div>
+      <SearchPage onBack={() => setShowSearch(false)} />
     );
   }
 
@@ -286,37 +281,81 @@ export default function IndexPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-green-800 text-white py-6 px-4 shadow-lg">
-        <div className="container mx-auto">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Building2 size={40} />
-              <div>
-                <h1 className="text-2xl font-bold">SISTEM LAPORAN PERNIKAHAN</h1>
-                <h2 className="text-lg">KANTOR KEMENTERIAN AGAMA KOTA GORONTALO</h2>
-              </div>
+      {/* Hero Section */}
+      <section className="bg-green-100 py-20">
+        <div className="container mx-auto text-center">
+          <h1 className="text-4xl font-bold text-green-800 mb-4">
+            Selamat Datang di Sistem Laporan Pernikahan
+          </h1>
+          <p className="text-lg text-gray-700 mb-8">
+            KANTOR KEMENTERIAN AGAMA KOTA GORONTALO
+          </p>
+          <div className="flex justify-center space-x-4">
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex items-center space-x-2 bg-green-800 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Search size={20} />
+              <span>Pencarian Data Nikah</span>
+            </button>
+            <button
+              onClick={() => setIsLoginVisible(true)}
+              className="flex items-center space-x-2 bg-white text-green-800 px-6 py-3 rounded-lg hover:bg-green-100 transition-colors"
+            >
+              <LogIn size={20} />
+              <span>Admin Dashboard</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Call to Action Section */}
+      <section className="py-12 bg-gray-50">
+        <div className="container mx-auto text-center">
+          <h2 className="text-3xl font-semibold text-green-800 mb-4">
+            Siap Update Data Pernikahan?
+          </h2>
+          <p className="text-gray-700 mb-8">
+            Login ke dashboard admin untuk mengelola dan melaporkan data pernikahan.
+          </p>
+          <button
+            onClick={() => setIsLoginVisible(true)}
+            className="bg-green-800 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Login ke Admin Dashboard
+          </button>
+        </div>
+      </section>
+
+      {/* AKADJI Section */}
+      <section className="py-12 bg-white">
+        <div className="container mx-auto text-center">
+          <h2 className="text-3xl font-semibold text-green-800 mb-8">
+            A K A D J I
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-700">Akuntabel</h3>
+              <p className="text-gray-600">Bertanggung jawab dan transparan dalam setiap tindakan.</p>
             </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setShowSearch(true)}
-                className="flex items-center space-x-2 bg-white text-green-800 px-4 py-2 rounded-lg hover:bg-green-100 transition-colors"
-              >
-                <Search size={20} />
-                <span>PENCARIAN DATA NIKAH</span>
-              </button>
-              <button
-                onClick={() => setIsLoginVisible(true)}
-                className="flex items-center space-x-2 bg-white text-green-800 px-4 py-2 rounded-lg hover:bg-green-100 transition-colors"
-              >
-                <LogIn size={20} />
-                <span>ADMIN DASHBOARD</span>
-              </button>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-700">Disiplin</h3>
+              <p className="text-gray-600">Taat pada aturan dan prosedur yang berlaku.</p>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-700">Jujur</h3>
+              <p className="text-gray-600">Bertindak dengan benar dan tanpa kecurangan.</p>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-700">Integritas</h3>
+              <p className="text-gray-600">Memiliki prinsip moral yang kuat dan konsisten.</p>
             </div>
           </div>
         </div>
-      </header>
+      </section>
 
-      <main className="container mx-auto py-8 px-4">
+      {/* Main Content (Charts) */}
+      <main className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Year Selection */}
         <div className="mb-8 flex justify-end">
           <select
@@ -425,9 +464,25 @@ export default function IndexPage() {
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="bg-green-800 text-white py-4">
+        <div className="container mx-auto text-center">
+          <p>&copy; 2025 Tolopani All rights reserved.</p>
+        </div>
+      </footer>
+
        {/* Login Form */}
        {isLoginVisible && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-xl shadow-md w-96">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-xl shadow-md w-full max-w-md">
+          <div className="flex justify-end">
+            <button
+              onClick={handleCloseLogin}
+              className="text-gray-500 hover:text-gray-700 focus:outline-none"
+            >
+              <X size={20} />
+            </button>
+          </div>
           <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
           {loginError && <p className="text-red-500 mb-4">{loginError}</p>}
           <div className="space-y-4">
