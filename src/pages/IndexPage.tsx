@@ -8,13 +8,15 @@ import {
   FileText,
   LogIn,
   ArrowLeft,
-  X
+  X,
+  MessageCircle
 } from 'lucide-react';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { MarriageRecord } from '../types/marriage';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useMarriageData } from '../hooks/useMarriageData';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 function SearchPage({ onBack }: { onBack: () => void }) {
   const [searchType, setSearchType] = useState('No Aktanikah');
@@ -194,7 +196,7 @@ function processDataForCharts(data: MarriageRecord[]) {
     const wifeAgeRange = getAgeRange(record.istri.usia);
     
     husbandAgeData.set(husbandAgeRange, (husbandAgeData.get(husbandAgeRange) || 0) + 1);
-    wifeAgeData.set(wifeAgeRange, (wifeAgeRange ? wifeAgeRange : 0) + 1);
+    wifeAgeData.set(wifeAgeRange, (wifeAgeData.get(wifeAgeRange) || 0) + 1);
 
     // Underage marriages
     if (record.suami.usia < 19 || record.istri.usia < 19) {
@@ -208,7 +210,7 @@ function processDataForCharts(data: MarriageRecord[]) {
     locationData: Array.from(locationData, ([name, value]) => ({ name, value })),
     ageData: {
       husband: Array.from(husbandAgeData, ([age, value]) => ({ age, value })),
-      wife: Array.from(wifeAgeData, ([age, value]))
+      wife: Array.from(wifeAgeData, ([age, value]) => ({ age, value }))
     },
     underageData: Array.from(underageData, ([month, value]) => ({ month, value }))
   };
@@ -218,7 +220,7 @@ function getAgeRange(age: number): string {
   if (age <= 25) return '19-25';
   if (age <= 30) return '26-30';
   if (age <= 35) return '31-35';
-  if (age <= 40) return '>40';
+  if (age <= 40) return '36-40';
   return '>40';
 }
 
@@ -290,13 +292,20 @@ export default function IndexPage() {
           <p className="text-lg text-gray-700 mb-8">
             KANTOR KEMENTERIAN AGAMA KOTA GORONTALO
           </p>
-          <div className="flex justify-center space-x-4">
+          <div className="flex justify-center space-x-4 flex-wrap gap-4">
             <button
               onClick={() => setShowSearch(true)}
               className="flex items-center space-x-2 bg-green-800 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
             >
               <Search size={20} />
               <span>Pencarian Data Nikah</span>
+            </button>
+            <button
+              onClick={() => navigate('/chatbot')}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <MessageCircle size={20} />
+              <span>Chatbot Bantuan</span>
             </button>
             <button
               onClick={() => setIsLoginVisible(true)}
@@ -474,42 +483,44 @@ export default function IndexPage() {
 
        {/* Login Form */}
        {isLoginVisible && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-xl shadow-md w-full max-w-md">
-          <div className="flex justify-end">
-            <button
-              onClick={handleCloseLogin}
-              className="text-gray-500 hover:text-gray-700 focus:outline-none"
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
-          {loginError && <p className="text-red-500 mb-4">{loginError}</p>}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
+            <div className="flex justify-end">
+              <button
+                onClick={handleCloseLogin}
+                className="text-gray-500 hover:text-gray-700 focus:outline-none"
+              >
+                <X size={20} />
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+            <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
+            {loginError && <p className="text-red-500 mb-4">{loginError}</p>}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <button
+                onClick={handleLogin}
+                className="w-full bg-green-800 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Login
+              </button>
             </div>
-            <button
-              onClick={handleLogin}
-              className="w-full bg-green-800 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Login
-            </button>
           </div>
         </div>
       )}
