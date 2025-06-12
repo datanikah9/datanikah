@@ -11,9 +11,13 @@ import {
   Calendar,
   Users,
   MapPin,
-  FileText
+  FileText,
+  X,
+  Filter,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { MarriageRecord } from '../types/marriage';
 
@@ -25,24 +29,31 @@ interface Message {
   data?: MarriageRecord[];
 }
 
-interface ChatbotIntent {
-  keywords: string[];
-  handler: (message: string) => Promise<string | { text: string; data: MarriageRecord[] }>;
-  examples: string[];
+interface StructuredQuery {
+  type: 'name' | 'akta' | 'date' | 'kua' | 'year';
+  value: string;
+  label: string;
 }
 
 export default function ChatbotPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Selamat datang di Chatbot Data Pernikahan Kemenag Kota Gorontalo! 👋\n\nSaya dapat membantu Anda mencari informasi tentang:\n• Data pernikahan berdasarkan nama\n• Statistik pernikahan per tahun\n• Informasi KUA\n• Data berdasarkan lokasi\n\nSilakan ketik pertanyaan Anda atau gunakan contoh berikut:\n"Cari data nikah atas nama Ahmad"\n"Berapa jumlah pernikahan tahun 2024"\n"Data KUA Kota Selatan"',
+      text: 'Selamat datang di Chatbot Data Pernikahan! 🤖\n\nSaya siap membantu Anda mencari informasi pernikahan dengan mudah. Anda bisa:\n\n📝 Ketik langsung pertanyaan\n🔍 Gunakan pencarian terstruktur\n📊 Minta statistik data\n\nContoh pertanyaan:\n"Cari data nikah Ahmad"\n"Berapa pernikahan tahun 2024?"\n"Data KUA Kota Selatan"',
       isBot: true,
       timestamp: new Date()
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [showStructuredSearch, setShowStructuredSearch] = useState(false);
+  const [structuredQuery, setStructuredQuery] = useState<StructuredQuery>({
+    type: 'name',
+    value: '',
+    label: 'Nama Lengkap'
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
 
   const scrollToBottom = () => {
@@ -53,11 +64,32 @@ export default function ChatbotPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
+    }
+  }, [inputMessage]);
+
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return 'Tidak tersedia';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
   const searchByName = async (name: string): Promise<{ text: string; data: MarriageRecord[] }> => {
     const marriageRef = collection(db, 'marriages');
     const upperName = name.toUpperCase();
     
-    // Search in both husband and wife names
     const husbandQuery = query(
       marriageRef,
       where('NamaSuami', '>=', upperName),
@@ -96,13 +128,17 @@ export default function ChatbotPage() {
 
     if (results.length === 0) {
       return {
-        text: `Maaf, tidak ditemukan data pernikahan dengan nama "${name}". Pastikan nama yang Anda masukkan sudah benar.`,
+        text: `Maaf, saya tidak menemukan data pernikahan dengan nama "${name}" 😔\n\nTips pencarian:\n• Pastikan ejaan nama sudah benar\n• Coba gunakan nama lengkap\n• Gunakan huruf kapital untuk nama\n\nAtau coba cari dengan data lain seperti nomor akta atau KUA.`,
         data: []
       };
     }
 
+    const resultText = results.length === 1 
+      ? `Saya menemukan 1 data pernikahan dengan nama "${name}" ✅`
+      : `Saya menemukan ${results.length} data pernikahan dengan nama "${name}" ✅`;
+
     return {
-      text: `Ditemukan ${results.length} data pernikahan dengan nama "${name}":`,
+      text: resultText,
       data: results
     };
   };
@@ -126,13 +162,41 @@ export default function ChatbotPage() {
 
     if (results.length === 0) {
       return {
-        text: `Tidak ditemukan data dengan nomor akta "${aktaNumber}".`,
+        text: `Tidak ditemukan data dengan nomor akta "${aktaNumber}" 📄\n\nPastikan:\n• Format nomor akta sudah benar\n• Tidak ada spasi berlebih\n• Gunakan huruf kapital\n\nContoh format: AN-2024-001`,
         data: []
       };
     }
 
     return {
-      text: `Ditemukan ${results.length} data dengan nomor akta "${aktaNumber}":`,
+      text: `Berhasil menemukan data dengan nomor akta "${aktaNumber}" ✅`,
+      data: results
+    };
+  };
+
+  const searchByDate = async (date: string): Promise<{ text: string; data: MarriageRecord[] }> => {
+    const marriageRef = collection(db, 'marriages');
+    
+    const q = query(
+      marriageRef,
+      where('TanggalAkad', '==', date),
+      limit(20)
+    );
+
+    const querySnapshot = await getDocs(q);
+    const results: MarriageRecord[] = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as MarriageRecord));
+
+    if (results.length === 0) {
+      return {
+        text: `Tidak ada pernikahan yang tercatat pada tanggal ${formatDate(date)} 📅\n\nCoba cari dengan tanggal lain atau gunakan pencarian berdasarkan bulan/tahun.`,
+        data: []
+      };
+    }
+
+    return {
+      text: `Ditemukan ${results.length} pernikahan pada tanggal ${formatDate(date)} 💒`,
       data: results
     };
   };
@@ -152,10 +216,13 @@ export default function ChatbotPage() {
     const count = querySnapshot.size;
 
     if (count === 0) {
-      return `Tidak ditemukan data pernikahan untuk tahun ${year}.`;
+      return `Belum ada data pernikahan untuk tahun ${year} 📊\n\nMungkin data belum diinput atau tahun yang dicari belum tersedia dalam sistem.`;
     }
 
-    return `📊 Statistik Pernikahan Tahun ${year}:\n\n• Total Pernikahan: ${count} pasangan\n• Rata-rata per bulan: ${Math.round(count / 12)} pasangan\n\nData ini mencakup seluruh wilayah Kota Gorontalo yang tercatat di sistem Kemenag.`;
+    const avgPerMonth = Math.round(count / 12);
+    const avgPerDay = Math.round(count / 365);
+
+    return `📊 **Statistik Pernikahan Tahun ${year}**\n\n✅ Total Pernikahan: **${count} pasangan**\n📅 Rata-rata per bulan: **${avgPerMonth} pasangan**\n📆 Rata-rata per hari: **${avgPerDay} pasangan**\n\n🏢 Data mencakup seluruh wilayah Kota Gorontalo yang tercatat di Kemenag.\n\nIngin melihat data tahun lain? Silakan tanya saya! 😊`;
   };
 
   const searchByKUA = async (kuaName: string): Promise<{ text: string; data: MarriageRecord[] }> => {
@@ -166,7 +233,8 @@ export default function ChatbotPage() {
       marriageRef,
       where('NamaKUA', '>=', upperKUA),
       where('NamaKUA', '<=', upperKUA + '\uf8ff'),
-      limit(10)
+      orderBy('TanggalAkad', 'desc'),
+      limit(15)
     );
 
     const querySnapshot = await getDocs(q);
@@ -177,80 +245,78 @@ export default function ChatbotPage() {
 
     if (results.length === 0) {
       return {
-        text: `Tidak ditemukan data pernikahan di KUA "${kuaName}".`,
+        text: `Tidak ditemukan data pernikahan di KUA "${kuaName}" 🏢\n\nPastikan nama KUA sudah benar. Contoh:\n• KUA Kota Selatan\n• KUA Kota Utara\n• KUA Dungingi`,
         data: []
       };
     }
 
     return {
-      text: `Ditemukan ${results.length} data pernikahan di KUA "${kuaName}":`,
+      text: `Ditemukan ${results.length} data pernikahan terbaru di KUA "${kuaName}" 🏢✅`,
       data: results
     };
   };
-
-  const chatbotIntents: ChatbotIntent[] = [
-    {
-      keywords: ['cari', 'nama', 'data nikah', 'pernikahan'],
-      handler: async (message: string) => {
-        const nameMatch = message.match(/(?:nama|atas nama|cari)\s+(.+?)(?:\s|$)/i);
-        if (nameMatch) {
-          return await searchByName(nameMatch[1].trim());
-        }
-        return 'Silakan sebutkan nama yang ingin dicari. Contoh: "Cari data nikah atas nama Ahmad"';
-      },
-      examples: ['Cari data nikah atas nama Ahmad', 'Data pernikahan nama Siti']
-    },
-    {
-      keywords: ['akta', 'nomor akta', 'no akta'],
-      handler: async (message: string) => {
-        const aktaMatch = message.match(/(?:akta|nomor akta|no akta)\s+(.+?)(?:\s|$)/i);
-        if (aktaMatch) {
-          return await searchByAktaNumber(aktaMatch[1].trim());
-        }
-        return 'Silakan sebutkan nomor akta yang ingin dicari. Contoh: "Cari nomor akta AN-2024-001"';
-      },
-      examples: ['Cari nomor akta AN-2024-001', 'Data akta nikah BN-2024-002']
-    },
-    {
-      keywords: ['tahun', 'statistik', 'jumlah', 'berapa'],
-      handler: async (message: string) => {
-        const yearMatch = message.match(/(?:tahun|statistik|jumlah)\s*(\d{4})/i);
-        if (yearMatch) {
-          return await getYearlyStats(yearMatch[1]);
-        }
-        return 'Silakan sebutkan tahun yang ingin dicari. Contoh: "Berapa jumlah pernikahan tahun 2024"';
-      },
-      examples: ['Berapa jumlah pernikahan tahun 2024', 'Statistik tahun 2023']
-    },
-    {
-      keywords: ['kua', 'kantor urusan agama'],
-      handler: async (message: string) => {
-        const kuaMatch = message.match(/(?:kua|kantor urusan agama)\s+(.+?)(?:\s|$)/i);
-        if (kuaMatch) {
-          return await searchByKUA(kuaMatch[1].trim());
-        }
-        return 'Silakan sebutkan nama KUA yang ingin dicari. Contoh: "Data KUA Kota Selatan"';
-      },
-      examples: ['Data KUA Kota Selatan', 'Pernikahan di KUA Kota Utara']
-    }
-  ];
 
   const processMessage = async (message: string): Promise<void> => {
     setIsTyping(true);
     
     try {
       let response: string | { text: string; data: MarriageRecord[] } = 
-        'Maaf, saya tidak memahami pertanyaan Anda. Silakan coba dengan kata kunci seperti:\n• "Cari nama [nama]"\n• "Nomor akta [nomor]"\n• "Statistik tahun [tahun]"\n• "Data KUA [nama KUA]"';
+        'Maaf, saya belum memahami pertanyaan Anda 🤔\n\nCoba gunakan kata kunci seperti:\n• "Cari nama [nama lengkap]"\n• "Nomor akta [nomor]"\n• "Statistik tahun [tahun]"\n• "Data KUA [nama KUA]"\n• "Pernikahan tanggal [tanggal]"\n\nAtau gunakan tombol pencarian terstruktur di bawah! 👇';
 
-      // Find matching intent
-      for (const intent of chatbotIntents) {
-        if (intent.keywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()))) {
-          response = await intent.handler(message);
-          break;
+      const lowerMessage = message.toLowerCase();
+
+      // Enhanced pattern matching with more natural language
+      if (lowerMessage.includes('nama') || lowerMessage.includes('cari')) {
+        const namePatterns = [
+          /(?:nama|cari|data)\s+(?:nikah\s+)?(?:atas\s+nama\s+)?(.+?)(?:\s*$|\s+(?:tahun|di|pada))/i,
+          /(?:pernikahan|nikah)\s+(.+?)(?:\s*$|\s+(?:tahun|di|pada))/i
+        ];
+        
+        for (const pattern of namePatterns) {
+          const match = message.match(pattern);
+          if (match && match[1].trim()) {
+            response = await searchByName(match[1].trim());
+            break;
+          }
+        }
+      } else if (lowerMessage.includes('akta') || lowerMessage.includes('nomor')) {
+        const aktaPatterns = [
+          /(?:akta|nomor akta|no akta|nomor)\s+([A-Z0-9\-]+)/i,
+          /([A-Z]{2}-\d{4}-\d{3})/i
+        ];
+        
+        for (const pattern of aktaPatterns) {
+          const match = message.match(pattern);
+          if (match) {
+            response = await searchByAktaNumber(match[1].trim());
+            break;
+          }
+        }
+      } else if (lowerMessage.includes('tahun') || lowerMessage.includes('statistik') || lowerMessage.includes('berapa')) {
+        const yearMatch = message.match(/(?:tahun|statistik|berapa).*?(\d{4})/i);
+        if (yearMatch) {
+          response = await getYearlyStats(yearMatch[1]);
+        }
+      } else if (lowerMessage.includes('kua') || lowerMessage.includes('kantor urusan agama')) {
+        const kuaPatterns = [
+          /(?:kua|kantor urusan agama)\s+(.+?)(?:\s*$|\s+(?:tahun|pada))/i,
+          /(?:di|pada)\s+kua\s+(.+?)(?:\s*$|\s+(?:tahun|pada))/i
+        ];
+        
+        for (const pattern of kuaPatterns) {
+          const match = message.match(pattern);
+          if (match && match[1].trim()) {
+            response = await searchByKUA(match[1].trim());
+            break;
+          }
+        }
+      } else if (lowerMessage.includes('tanggal') || lowerMessage.includes('hari')) {
+        const dateMatch = message.match(/(\d{4}-\d{2}-\d{2})/);
+        if (dateMatch) {
+          response = await searchByDate(dateMatch[1]);
         }
       }
 
-      // Add bot response
       const botMessage: Message = {
         id: Date.now().toString(),
         text: typeof response === 'string' ? response : response.text,
@@ -264,7 +330,7 @@ export default function ChatbotPage() {
       console.error('Error processing message:', error);
       const errorMessage: Message = {
         id: Date.now().toString(),
-        text: 'Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi.',
+        text: 'Maaf, terjadi kesalahan sistem 😔\n\nSilakan coba lagi dalam beberapa saat atau hubungi administrator jika masalah berlanjut.',
         isBot: true,
         timestamp: new Date()
       };
@@ -277,7 +343,6 @@ export default function ChatbotPage() {
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputMessage,
@@ -289,8 +354,43 @@ export default function ChatbotPage() {
     const messageToProcess = inputMessage;
     setInputMessage('');
 
-    // Process the message
     await processMessage(messageToProcess);
+  };
+
+  const handleStructuredSearch = async () => {
+    if (!structuredQuery.value.trim()) return;
+
+    let searchMessage = '';
+    switch (structuredQuery.type) {
+      case 'name':
+        searchMessage = `Cari nama ${structuredQuery.value}`;
+        break;
+      case 'akta':
+        searchMessage = `Nomor akta ${structuredQuery.value}`;
+        break;
+      case 'date':
+        searchMessage = `Pernikahan tanggal ${structuredQuery.value}`;
+        break;
+      case 'kua':
+        searchMessage = `Data KUA ${structuredQuery.value}`;
+        break;
+      case 'year':
+        searchMessage = `Statistik tahun ${structuredQuery.value}`;
+        break;
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: searchMessage,
+      isBot: false,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setStructuredQuery({ ...structuredQuery, value: '' });
+    setShowStructuredSearch(false);
+
+    await processMessage(searchMessage);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -301,164 +401,234 @@ export default function ChatbotPage() {
   };
 
   const quickActions = [
-    { icon: Search, text: 'Cari nama Ahmad', action: () => setInputMessage('Cari data nikah atas nama Ahmad') },
-    { icon: Calendar, text: 'Statistik 2024', action: () => setInputMessage('Berapa jumlah pernikahan tahun 2024') },
-    { icon: MapPin, text: 'Data KUA', action: () => setInputMessage('Data KUA Kota Selatan') },
-    { icon: FileText, text: 'Nomor Akta', action: () => setInputMessage('Cari nomor akta ') }
+    { icon: Search, text: 'Cari Nama', action: () => setInputMessage('Cari nama ') },
+    { icon: Calendar, text: 'Statistik 2024', action: () => setInputMessage('Berapa pernikahan tahun 2024?') },
+    { icon: MapPin, text: 'Data KUA', action: () => setInputMessage('Data KUA ') },
+    { icon: FileText, text: 'Nomor Akta', action: () => setInputMessage('Nomor akta ') }
+  ];
+
+  const searchTypes = [
+    { value: 'name', label: 'Nama Lengkap', placeholder: 'Masukkan nama suami atau istri' },
+    { value: 'akta', label: 'Nomor Akta', placeholder: 'Contoh: AN-2024-001' },
+    { value: 'date', label: 'Tanggal Pernikahan', placeholder: 'Format: YYYY-MM-DD' },
+    { value: 'kua', label: 'Nama KUA', placeholder: 'Contoh: Kota Selatan' },
+    { value: 'year', label: 'Tahun (Statistik)', placeholder: 'Contoh: 2024' }
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
+      {/* Mobile-Optimized Header */}
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center space-x-2 text-green-800 hover:text-green-700 transition-colors"
+                className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors"
               >
-                <ArrowLeft size={24} />
-                <span className="font-medium">Kembali</span>
+                <ArrowLeft size={20} className="text-green-800" />
               </button>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
                 <div className="bg-green-100 p-2 rounded-full">
-                  <MessageCircle className="text-green-800" size={24} />
+                  <MessageCircle className="text-green-800" size={20} />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">Chatbot Data Pernikahan</h1>
-                  <p className="text-sm text-gray-600">Kemenag Kota Gorontalo</p>
+                  <h1 className="text-lg font-bold text-gray-900">Chatbot</h1>
+                  <p className="text-xs text-gray-600">Data Pernikahan</p>
                 </div>
               </div>
             </div>
+            <button
+              onClick={() => setShowStructuredSearch(!showStructuredSearch)}
+              className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <Filter size={20} className="text-green-800" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Chat Container */}
-      <div className="container mx-auto px-4 py-6 max-w-4xl">
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden h-[calc(100vh-200px)] flex flex-col">
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}>
-                <div className={`flex items-start space-x-3 max-w-3xl ${message.isBot ? '' : 'flex-row-reverse space-x-reverse'}`}>
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.isBot ? 'bg-green-100' : 'bg-blue-100'
-                  }`}>
-                    {message.isBot ? (
-                      <Bot className="text-green-800" size={16} />
-                    ) : (
-                      <User className="text-blue-800" size={16} />
-                    )}
-                  </div>
-                  <div className={`rounded-2xl px-4 py-3 ${
-                    message.isBot 
-                      ? 'bg-gray-100 text-gray-800' 
-                      : 'bg-green-800 text-white'
-                  }`}>
-                    <p className="whitespace-pre-wrap">{message.text}</p>
-                    {message.data && message.data.length > 0 && (
-                      <div className="mt-4 space-y-3">
-                        {message.data.map((record) => (
-                          <div key={record.id} className="bg-white rounded-lg p-4 border border-gray-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      {/* Structured Search Panel */}
+      {showStructuredSearch && (
+        <div className="bg-white border-b shadow-sm">
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Pencarian Terstruktur</h3>
+              <button
+                onClick={() => setShowStructuredSearch(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <select
+                value={structuredQuery.type}
+                onChange={(e) => {
+                  const selectedType = searchTypes.find(type => type.value === e.target.value);
+                  setStructuredQuery({
+                    type: e.target.value as any,
+                    value: '',
+                    label: selectedType?.label || ''
+                  });
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                {searchTypes.map(type => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+              
+              <div className="flex space-x-2">
+                <input
+                  type={structuredQuery.type === 'date' ? 'date' : 'text'}
+                  value={structuredQuery.value}
+                  onChange={(e) => setStructuredQuery({ ...structuredQuery, value: e.target.value })}
+                  placeholder={searchTypes.find(type => type.value === structuredQuery.type)?.placeholder}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleStructuredSearch}
+                  disabled={!structuredQuery.value.trim()}
+                  className="bg-green-800 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Search size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Container - Mobile Optimized */}
+      <div className="flex flex-col h-[calc(100vh-140px)]">
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}>
+              <div className={`flex items-start space-x-2 max-w-[85%] ${message.isBot ? '' : 'flex-row-reverse space-x-reverse'}`}>
+                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                  message.isBot ? 'bg-green-100' : 'bg-blue-100'
+                }`}>
+                  {message.isBot ? (
+                    <Bot className="text-green-800" size={14} />
+                  ) : (
+                    <User className="text-blue-800" size={14} />
+                  )}
+                </div>
+                <div className={`rounded-2xl px-4 py-3 ${
+                  message.isBot 
+                    ? 'bg-gray-100 text-gray-800' 
+                    : 'bg-green-800 text-white'
+                }`}>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>
+                  {message.data && message.data.length > 0 && (
+                    <div className="mt-3 space-y-3">
+                      {message.data.map((record) => (
+                        <div key={record.id} className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+                          <div className="space-y-2 text-xs">
+                            <div className="grid grid-cols-1 gap-2">
                               <div>
-                                <span className="font-semibold text-gray-700">Suami:</span>
-                                <p className="text-gray-900">{record.NamaSuami}</p>
+                                <span className="font-semibold text-green-800">👤 Suami:</span>
+                                <p className="text-gray-900 font-medium">{record.NamaSuami}</p>
                               </div>
                               <div>
-                                <span className="font-semibold text-gray-700">Istri:</span>
-                                <p className="text-gray-900">{record.NamaIstri}</p>
+                                <span className="font-semibold text-pink-800">👰 Istri:</span>
+                                <p className="text-gray-900 font-medium">{record.NamaIstri}</p>
                               </div>
                               <div>
-                                <span className="font-semibold text-gray-700">KUA:</span>
+                                <span className="font-semibold text-blue-800">🏢 KUA:</span>
                                 <p className="text-gray-900">{record.NamaKUA}</p>
                               </div>
                               <div>
-                                <span className="font-semibold text-gray-700">Tanggal Akad:</span>
-                                <p className="text-gray-900">{record.TanggalAkad}</p>
+                                <span className="font-semibold text-purple-800">📅 Tanggal:</span>
+                                <p className="text-gray-900">{formatDate(record.TanggalAkad)}</p>
                               </div>
                               <div>
-                                <span className="font-semibold text-gray-700">No. Akta:</span>
-                                <p className="text-gray-900">{record.NoAktanikah}</p>
+                                <span className="font-semibold text-orange-800">📄 No. Akta:</span>
+                                <p className="text-gray-900 font-mono">{record.NoAktanikah}</p>
                               </div>
-                              <div>
-                                <span className="font-semibold text-gray-700">No. Perforasi:</span>
-                                <p className="text-gray-900">{record.NoPerforasi}</p>
-                              </div>
+                              {record.NoPerforasi && (
+                                <div>
+                                  <span className="font-semibold text-teal-800">🔢 No. Perforasi:</span>
+                                  <p className="text-gray-900 font-mono">{record.NoPerforasi}</p>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs opacity-70 mt-2">
-                      {message.timestamp.toLocaleTimeString('id-ID', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="flex items-start space-x-3 max-w-3xl">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                    <Bot className="text-green-800" size={16} />
-                  </div>
-                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                    <div className="flex items-center space-x-1">
-                      <Loader2 className="animate-spin text-green-800" size={16} />
-                      <span className="text-gray-600">Sedang mengetik...</span>
+                        </div>
+                      ))}
                     </div>
+                  )}
+                  <p className="text-xs opacity-70 mt-2">
+                    {message.timestamp.toLocaleTimeString('id-ID', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          {isTyping && (
+            <div className="flex justify-start">
+              <div className="flex items-start space-x-2 max-w-[85%]">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                  <Bot className="text-green-800" size={14} />
+                </div>
+                <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="animate-spin text-green-800" size={14} />
+                    <span className="text-gray-600 text-sm">Sedang mencari...</span>
                   </div>
                 </div>
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Quick Actions */}
-          <div className="px-6 py-3 border-t bg-gray-50">
-            <div className="flex flex-wrap gap-2">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={action.action}
-                  className="flex items-center space-x-2 bg-white hover:bg-green-50 border border-gray-200 hover:border-green-300 rounded-full px-3 py-2 text-sm transition-colors"
-                >
-                  <action.icon size={14} className="text-green-800" />
-                  <span className="text-gray-700">{action.text}</span>
-                </button>
-              ))}
             </div>
-          </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-          {/* Input Area */}
-          <div className="p-6 border-t bg-white">
-            <div className="flex items-end space-x-3">
-              <div className="flex-1">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Ketik pertanyaan Anda di sini..."
-                  className="w-full resize-none border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-green-500 focus:border-transparent max-h-32"
-                  rows={1}
-                  disabled={isTyping}
-                />
-              </div>
+        {/* Quick Actions - Mobile Optimized */}
+        <div className="px-4 py-2 border-t bg-gray-50">
+          <div className="flex space-x-2 overflow-x-auto pb-2">
+            {quickActions.map((action, index) => (
               <button
-                onClick={handleSendMessage}
-                disabled={!inputMessage.trim() || isTyping}
-                className="bg-green-800 hover:bg-green-700 disabled:bg-gray-300 text-white p-3 rounded-xl transition-colors"
+                key={index}
+                onClick={action.action}
+                className="flex items-center space-x-2 bg-white hover:bg-green-50 border border-gray-200 hover:border-green-300 rounded-full px-3 py-2 text-xs whitespace-nowrap transition-colors flex-shrink-0"
               >
-                <Send size={20} />
+                <action.icon size={12} className="text-green-800" />
+                <span className="text-gray-700">{action.text}</span>
               </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Input Area - Mobile Optimized */}
+        <div className="p-4 border-t bg-white">
+          <div className="flex items-end space-x-3">
+            <div className="flex-1">
+              <textarea
+                ref={inputRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Ketik pertanyaan Anda..."
+                className="w-full resize-none border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                rows={1}
+                disabled={isTyping}
+                style={{ minHeight: '44px', maxHeight: '120px' }}
+              />
             </div>
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || isTyping}
+              className="bg-green-800 hover:bg-green-700 disabled:bg-gray-300 text-white p-3 rounded-xl transition-colors flex-shrink-0"
+            >
+              <Send size={18} />
+            </button>
           </div>
         </div>
       </div>
